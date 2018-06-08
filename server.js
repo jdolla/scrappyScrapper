@@ -15,7 +15,6 @@ app.use(bodyParser.json())
 
 mongoose.connect("mongodb://localhost/scrappyscrapper");
 
-
 app.get('/api/articles', (req, res, next) => {
     axios.get("http://www.nytimes.com")
         .then(data => {
