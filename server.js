@@ -13,50 +13,81 @@ const app = express();
 app.use(express.static('public'));
 app.use(bodyParser.json())
 
-mongoose.connect("mongodb://localhost/scrappyscrapper");
+const mongoConn = process.env.mongodb || "mongodb://localhost/scrappyscrapper";
+mongoose.connect(mongoConn);
 
-app.get('/api/articles', (req, res, next) => {
+app.get('/api/scrape', (req, res, next) => {
     axios.get("http://www.nytimes.com")
         .then(data => {
             const $ = cheerio.load(data.data)
 
+            const results = [];
             const articles = $("div.collection article");
             articles.each( (i, article) => {
                 var result = {};
 
                 result.headline = $("h2 a", article).text();
                 result.uri = $("h2 a", article).attr("href");
+                result.summary = $("p.summary", article).text();
 
-                if(result.headline && result.uri){
-                    options = {
-                        upsert: true
-                    }
-                    conditions = {
-                        "headline":result.headline
-                    };
-                    Article.findOneAndUpdate(conditions, result, options, (err, doc) => {
-                        if (err){
-                            console.log(err);
-                            res.status(500);
-                            res.json({"error":"internal server error"})
-                        }
-                    })
+                if(result.headline && result.uri && result.summary){
+                    results.push(result)
                 }
 
             })
-
-            withComQuery = Article.find({"comments": {$ne: null}}).sort({"created": -1});
-            withComQuery.exec( (err, withComArts) => {
-                withoutQuery = Article.find({"comments": null}).sort({"created": -1});
-                withoutQuery.exec( (err, withoutComArts) => {
-                    return res.json({"with": withComArts, "without": withoutComArts});
-                })
-            })
-
+            return res.json(results)
         })
         .catch( err => {
             return res.send(err);
         })
+})
+
+
+app.post('/api/article/save', (req, res, next) => {
+    const article = req.body;
+    const {headline, uri, summary} = req.body;
+    options = {
+        upsert: true
+    }
+    conditions = {
+        headline,
+    };
+
+    story = {
+        headline,
+        uri,
+        summary,
+    };
+
+    Article.findOneAndUpdate(conditions, story, options, (err, doc) => {
+        if (err){
+            console.log(err);
+            res.status(500);
+            res.json({"error":"internal server error"})
+        }
+        res.status(200);
+        res.json({"status":"ok"})
+    })
+})
+
+app.get('/api/article/:id', (req, res, next) => {
+    const id = req.params.id;
+    const query = Article.findOne({"_id": id});
+    query.exec( (err, article) => {
+        if(err){
+            console.log(err);
+            res.status(500);
+            res.json({"status":"internal server error"});
+        }
+        return res.json(article);
+    })
+})
+
+app.get('/api/saved', (req, res, next) => {
+    artQuery = Article.find().sort({"created": -1});
+    artQuery.exec( (err, articles) => {
+            return res.json(articles);
+    })
 })
 
 app.post('/api/comment/add', (req, res, next) => {
@@ -92,10 +123,11 @@ app.delete('/api/article/delete/:articleId', (req, res, next) => {
     const articleId = req.params.articleId;
     Article.remove({'_id': articleId}, (err, result) => {
         if(err){
+            console.log(err)
             res.statusCode = 500;
-            res.json({"status":"internal server error"});
+            return res.json({"status":"internal server error"});
         }
-        res.json({"status":"ok"});
+        return res.json({"status":"ok"});
     })
 })
 

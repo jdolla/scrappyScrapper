@@ -24,6 +24,10 @@ var ArticleSchema = new Schema({
     trim: true,
     required: "String is Required"
   },
+  summary: {
+    type: String,
+    trim: true,
+  },
   created: {
     type: Date,
     default: Date.now,
